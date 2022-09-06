@@ -1,0 +1,154 @@
+# 9장. 도메인 모델과 바운디드 컨텍스트
+
+<br>
+
+## 9.1 도메인 모델과 경계
+
+- 처음 도메인 모델을 만들 때 빠지기 쉬운 함정은 **도메인을 완벽하게 표현하는 단일 모델을 만드는 것**
+- 카탈로그에서 **상품(상품 정보 위주) ≠** 재고 관리 **상품(실존하는 개별 객체를 추적하는 용도)**
+- 논리적으로 같은 존재처럼 보이지만 하위 도메인에 따라 다른 용어를 사용하는 경우
+    
+    ex) 시스템을 사용하는 사람 
+    회원 도메인 → 회원, 주문 도메인 → 주문자, 배송 도메인 → 보내는 사람
+    
+- 한 개의 모델로 모든 하위 도메인을 표현하려는 시도는 X, 하위 도메인마다 모델을 정의
+- 모델은 특정한 컨텍스트 하에서 완전한 의미를 가짐
+- 구분되는 경계를 갖는 컨텍스트 → **바운디드 컨텍스트**
+
+<br>
+
+## 9.2 바운디드 컨텍스트
+
+- 모델의 경계를 결정하며 한 개의 바운디드 컨텍스트는 논리적으로 한 개의 모델을 가짐
+- 용어를 기준으로 구분
+- 실제로 사용자에게 기능을 제공하는 물리적 시스템
+도메인 모델은 이 바운디드 컨텍스트 안에서 도메인을 구현
+- 이상적 → 하위 도메인(1) :  바운디드 컨텍스트(1)
+현실    → 팀 조직 구조에 따라 결정
+   
+   ![Untitled](https://user-images.githubusercontent.com/26344479/188674197-114c6dff-9729-4f5a-b022-6ac9bbf8cc6d.png)
+    
+- 여러 하위 도메인을 하나의 바운디드 컨텍스트에서 개발할 때 주의할 점은 하위 도메인의 모델이 섞이지 않는 것
+- 한 프로젝트에 각 하위 도메인의 모델이 위치하면, 단일 모델로 만들고 싶은 유혹이 있음
+그렇게 되면 확장이 어려워지고 서비스 경쟁력을 떨어트리는 원인
+- 따라서 하위 도메인마다 구분되는 패키지를 갖도록 구현
+
+    ![Untitled 1](https://user-images.githubusercontent.com/26344479/188674045-c61be035-e4e3-40bb-ac5e-25a5ce8af229.png)
+    
+- 바운디드 컨텍스트는 구현하는 하위 도메인에 알맞은 모델을 포함
+    
+    ![Untitled 2](https://user-images.githubusercontent.com/26344479/188674074-a53ed9f9-28a0-465e-87a8-09de60c7073d.png)
+
+<br>
+
+## 9.3 바운디드 컨텍스트 구현
+
+- 도메인 모델만 포함이 아닌 도메인 기능을 사용자에게 제공하는 데 필요한 영역 모두 포함(표현, 응용, 인프라스트럭처, DB 테이블)
+- 모든 바운디드 컨텍스트를 반드시 DDD로 개발할 필요는 없음
+- 한 바운디드 컨테스트에서 두 방식을 혼합해서 사용 가능 → 대표적으로 CQRS
+상태 변경 : DDD, 조회 기능 : 서비스-DAO
+    
+   ![Untitled 3](https://user-images.githubusercontent.com/26344479/188674446-6a63586d-8cc6-4aa3-8732-cc4777bc82c7.png)
+    
+- 방식 외에도 다른 구현 기술 사용 가능(ORM, DB, UI)
+
+<br>
+
+## 9.4 바운디드 컨텍스트 간 통합
+
+![Untitled 4](https://user-images.githubusercontent.com/26344479/188674572-1c40462d-2109-4dec-8b12-f356f121dfbe.png)
+
+- 카탈로그에서 상품 추천 기능이 추가된다면 자연스럽게 **통합**이 발생
+- 각 컨텍스트 별 도메인 모델은 다름(카탈로그 → 제품 중심, 추천 → 추천 연산)
+- 모델이 다르기 때문에 사용하는 쪽에 모델로 변환을 하는데 이를 도메인 서비스를 사용
+    
+    ```java
+    public interface ProductRecommendationService {
+    	List<Product> getRecommendationOf(ProductId id);
+    }
+    ```
+    
+    - 도메인 서비스를 구현하는 클래스는 인프라스트럭처 영역에 위치
+    - 해당 클래스는 외부 시스템과의 연동 처리, 외부 시스템 모델과 현재 도메인 모델 간의 변환
+    
+   ![Untitled 5](https://user-images.githubusercontent.com/26344479/188674608-0f9361ab-d206-41eb-942c-789288d03311.png)
+    
+    ```java
+    public class RecSystemClient implements ProductRecommendationService {
+    	private ProductRepository productRepository;
+    	
+    	@Override
+    	List<Product> getRecommendationOf(ProductId id){
+    		List<RecommendationItem> items = getRecItems(id.getValue());
+    		return toProducts(items);
+    	}
+    
+    	// RecommendationItem은 추천 시스템의 모델
+    	private List<RecommendationItem> getRecItems(String itemId) {
+    		// 외부 추천 시스템 클라이언트
+    		return externalRecClient.getRecs(itemId);
+    	}
+    
+    	// 현재 컨텍스트(카탈로그)의 모델로 변환
+    	private List<Product> toProducts(List<RecommendationItem> items) {
+    		return items.stream()
+    						.map(item -> toProductId(item.getItemId()))
+    						.map(prodId -> productRepository.findById(prodId))
+    						.collect(toList());
+    	}
+    
+    	private ProductId toProductId(String itemId) {
+    		return new ProductId(itemId);
+    	}
+    }
+    ```
+    
+    - 변환 로직이 복잡하다면 별도의 클래스를 만들어 위임
+    
+    ![Untitled 6](https://user-images.githubusercontent.com/26344479/188674641-46fadb4c-3a71-4e81-a405-d3e7ad5bb508.png)
+    
+- REST API를 호출하는 것은 직접 통합하는 방법
+메시지 큐를 사용하는 것은 간접 통합하는 대표적인 방법
+- 메시지 큐를 사용할 때는 메시지의 데이터 구조를 맞춰야 함을 의미
+- 메시지 구조는 메시지 시스템을 관리하는 바운디드 컨텍스트의 관점에서 정의
+- 해당 데이터를 사용하는 바운디드 컨텍스트는 메시지를 구독
+
+> **마이크로 서비스와 바운디드 컨텍스트** <br><br>
+> 바운디드 컨텍스트를 마이크로서비스로 구현하면 자연스럽게 컨텍스트별로 모델이 분리<br>
+> 즉, 바운디드 컨텍스트 마다 프로젝트를 생성<br>
+> 이는 코드 수준에서 모델을 분리하여 두 바운디드 컨텍스트의 모델이 섞이지 않도록 해줌<br>
+
+<br>
+
+## 9.5 바운디드 컨텍스트 간 관계
+
+- 바운디드 컨텍스트 간 가장 흔한 관계는 한쪽에서는 호출, 다른 쪽에서는 데이터 제공(REST API)
+- API를 사용하는 바운디드 컨텍스트는 API를 제공하는 바운디드 컨텍스트에 의존
+    
+    ![Untitled 7](https://user-images.githubusercontent.com/26344479/188674666-1eed1818-1ff0-460c-8a8a-ea063737ee7b.png)
+    
+    - 하류에서는 상류에서 제공하는 데이터와 기능에 의존
+    - 따라서 **상호 협력이 필수적**
+- 상류(하나) < - > 하류(다수)
+여러 하류 팀의 요구사항을 수용할 수 있는 API를 만들고 이를 서비스 형태(공개 호스트 서비스, Open Host Service)로 공개하여 일관성 유지
+    
+   ![Untitled 8](https://user-images.githubusercontent.com/26344479/188674710-1aaa6d1d-fab3-4acd-bafb-60162c601120.png)
+    
+- 하류에서는 상류 서비스의 모델이 자신의 도메인 모델에 영향을 주지 않도록 보호해주는 완충 지대(안티코럽션 계층, ACL)를 구현
+- 두 바운디드 컨텍스트가 같은 모델(공유 커널, Shared Kernel)을 공유하므로써 중복 설계를 막을 수도 있음
+만약, 두 바운디드 컨텍스트를 밀접한 관계를 형성할 수 없으면 개발 지연이 일어날 수 있음
+- 독립 방식(Separate Way)은 두 바운디드 컨텍스트를 직접 통합(사람이 손 수..)
+규모가 커질수록 수동 통합에는 한계
+
+<br>
+
+## 9.6 컨텍스트 맵
+
+ ![Untitled 9](https://user-images.githubusercontent.com/26344479/188674833-60b0987f-ef22-4bdc-8c07-80655270d438.png)
+
+- 컨텍스트 맵은 바운디드 컨텍스트 간의 관계를 표시
+- 바운디드 컨텍스트 영역에 주요 애그리거트를 함께 표시하면 모델에 대한 관계가 더 명확
+- 컨텍스트 맵을 그리는 규칙은 따로 없음
+
+### Reference
+- 최범균 - 도메인 주도 개발 시작하기
